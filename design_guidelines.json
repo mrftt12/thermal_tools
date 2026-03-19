@@ -1,0 +1,143 @@
+{
+  "design_system": {
+    "identity": {
+      "name": "CableThermal AI",
+      "personality": "Precision-Engineered, High-Voltage, Cyber-Industrial",
+      "archetype": "The Electric Architect",
+      "vibe": "Dark mode technical dashboard meets cyberpunk precision"
+    },
+    "typography": {
+      "font_family": {
+        "headings": "JetBrains Mono, monospace",
+        "body": "Inter, sans-serif",
+        "code": "JetBrains Mono, monospace"
+      },
+      "scale": {
+        "h1": "text-4xl md:text-5xl font-bold tracking-tight",
+        "h2": "text-3xl md:text-4xl font-semibold tracking-tight",
+        "h3": "text-2xl font-medium tracking-tight",
+        "body": "text-base leading-relaxed text-zinc-400",
+        "caption": "text-xs font-mono uppercase tracking-wider text-zinc-500"
+      },
+      "imports": [
+        "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Inter:wght@300;400;500;600;700&display=swap"
+      ]
+    },
+    "colors": {
+      "primary": {
+        "DEFAULT": "#06b6d4",
+        "foreground": "#000000",
+        "glow": "0 0 20px rgba(6, 182, 212, 0.5)"
+      },
+      "background": {
+        "DEFAULT": "#09090b",
+        "secondary": "#18181b",
+        "tertiary": "#27272a"
+      },
+      "surface": {
+        "card": "rgba(24, 24, 27, 0.6)",
+        "border": "rgba(255, 255, 255, 0.1)",
+        "hover": "rgba(6, 182, 212, 0.1)"
+      },
+      "status": {
+        "success": "#10b981",
+        "warning": "#f59e0b",
+        "error": "#ef4444",
+        "info": "#3b82f6"
+      },
+      "charts": {
+        "temp_high": "#ef4444",
+        "temp_med": "#f59e0b",
+        "temp_low": "#06b6d4",
+        "ampacity": "#10b981"
+      }
+    },
+    "layout": {
+      "spacing_scale": "conservative-but-breathing",
+      "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+      "grid_system": "Bento Grid (12 cols)",
+      "radius": {
+        "sm": "2px",
+        "md": "4px",
+        "lg": "8px",
+        "xl": "12px"
+      },
+      "shadows": {
+        "card": "0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3)",
+        "neon": "0 0 10px rgba(6, 182, 212, 0.3)"
+      }
+    },
+    "components": {
+      "buttons": {
+        "primary": "bg-cyan-500 text-black hover:bg-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.4)] font-mono uppercase tracking-wider text-sm",
+        "secondary": "bg-zinc-800 text-zinc-100 border border-zinc-700 hover:border-cyan-500 hover:text-cyan-400 transition-all duration-300",
+        "ghost": "text-zinc-400 hover:text-cyan-400 hover:bg-zinc-800/50"
+      },
+      "cards": {
+        "base": "bg-zinc-900/60 backdrop-blur-md border border-zinc-800/80 rounded-lg p-6 hover:border-zinc-700 transition-colors",
+        "interactive": "group relative overflow-hidden bg-zinc-900 border border-zinc-800 hover:border-cyan-500/50 transition-all duration-300"
+      },
+      "inputs": {
+        "base": "bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 rounded-md font-mono text-sm"
+      }
+    },
+    "visual_assets": {
+      "background_texture": "radial-gradient(circle at 50% 50%, rgba(6, 182, 212, 0.05) 0%, transparent 50%), linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px)",
+      "background_size": "100% 100%, 40px 40px, 40px 40px",
+      "icons_library": "lucide-react"
+    }
+  },
+  "pages": {
+    "landing": {
+      "structure": [
+        "Hero Section: High-impact visualization of cable heat map + Value Prop",
+        "Features Grid: 3-col bento grid showing 'Standards Compliance', 'D3 Visualization', 'Report Gen'",
+        "Interactive Demo Preview: A mini-calculator or static heatmap that animates",
+        "Testimonials/Trust: Engineering firms logos",
+        "Footer: Simple, technical links"
+      ],
+      "images": {
+        "hero_bg": "https://images.unsplash.com/photo-1764258560300-2346b28b4e7c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHw0fHxhYnN0cmFjdCUyMGRpZ2l0YWwlMjBuZXR3b3JrJTIwYmx1ZSUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzczOTU2Mzk5fDA&ixlib=rb-4.1.0&q=85",
+        "hero_overlay": "Blue gradient overlay with opacity 0.8"
+      }
+    },
+    "dashboard": {
+      "structure": [
+        "Sidebar: Navigation (Projects, Library, Settings)",
+        "Header: User profile, Quick Calculation btn",
+        "Main Area: Project Grid (Recent calculations with mini-charts)",
+        "Stats Row: System Status, Latest Standards Updates"
+      ],
+      "images": {
+        "empty_state": "https://images.unsplash.com/photo-1680992046626-418f7e910589?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHwyfHxzZXJ2ZXIlMjByb29tJTIwYmx1ZSUyMGxpZ2h0c3xlbnwwfHx8fDE3NzM5NTYzOTd8MA&ixlib=rb-4.1.0&q=85"
+      }
+    },
+    "cable_library": {
+      "structure": [
+        "Filter Sidebar: Voltage, Material, Type",
+        "Cable List: Cards with technical specs (Cross-section area, Ampacity rating)",
+        "Detail View: Tabbed interface (Conductor, Insulation, Sheath)"
+      ],
+      "images": {
+        "cable_preview_placeholder": "https://images.unsplash.com/photo-1580404417320-56170f5897f6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1ODF8MHwxfHNlYXJjaHw0fHxpbmR1c3RyaWFsJTIwdGhpY2slMjBjYWJsZSUyMHNwb29sfGVufDB8fHx8MTc3Mzk1NjM5OHww&ixlib=rb-4.1.0&q=85"
+      }
+    },
+    "calculation_wizard": {
+      "structure": [
+        "Stepper: Top progress bar (glowing)",
+        "Split Layout: Left form inputs, Right real-time D3 visualization",
+        "Results: Bottom drawer or final step with Contour Plots"
+      ]
+    }
+  },
+  "universal_guidelines": [
+    "ALWAYS use a 'dark' class on the HTML/Body tag by default.",
+    "Do NOT use pure black (#000000). Use Zinc-950 (#09090b) for background to reduce eye strain.",
+    "Use 'cyan-400' or 'cyan-500' for primary actions and accents. It pops against the dark theme.",
+    "Input fields must have a monospace font family (JetBrains Mono) to emphasize precision.",
+    "D3 Charts must be styled with the dark theme in mind: dark backgrounds, bright lines/areas.",
+    "Use 'sonner' for toast notifications (success/error).",
+    "Ensure all interactive elements have hover states (glow or border color change).",
+    "Accessibility: Ensure text contrast ratios (Cyan on Zinc-950 is high contrast)."
+  ]
+}
