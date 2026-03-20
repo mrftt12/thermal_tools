@@ -1,115 +1,233 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-    margin: 0;
-    font-family:
-        -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
-        "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-        sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-}
-
-code {
-    font-family:
-        source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+@layer base {
+  :root {
+    --background: 240 6% 4%;
+    --foreground: 0 0% 98%;
+    --card: 240 6% 7%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 6% 7%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 187 80% 44%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 240 4% 16%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 4% 16%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 187 80% 44%;
+    --accent-foreground: 0 0% 0%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 4% 16%;
+    --input: 240 4% 16%;
+    --ring: 187 80% 44%;
+    --chart-temp-high: 0 84% 60%;
+    --chart-temp-med: 38 92% 50%;
+    --chart-temp-low: 187 80% 44%;
+    --chart-ampacity: 160 84% 40%;
+    --radius: 0.5rem;
+  }
 }
 
 @layer base {
-    :root {
-        --background: 0 0% 100%;
-        --foreground: 0 0% 3.9%;
-        --card: 0 0% 100%;
-        --card-foreground: 0 0% 3.9%;
-        --popover: 0 0% 100%;
-        --popover-foreground: 0 0% 3.9%;
-        --primary: 0 0% 9%;
-        --primary-foreground: 0 0% 98%;
-        --secondary: 0 0% 96.1%;
-        --secondary-foreground: 0 0% 9%;
-        --muted: 0 0% 96.1%;
-        --muted-foreground: 0 0% 45.1%;
-        --accent: 0 0% 96.1%;
-        --accent-foreground: 0 0% 9%;
-        --destructive: 0 84.2% 60.2%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 0 0% 89.8%;
-        --input: 0 0% 89.8%;
-        --ring: 0 0% 3.9%;
-        --chart-1: 12 76% 61%;
-        --chart-2: 173 58% 39%;
-        --chart-3: 197 37% 24%;
-        --chart-4: 43 74% 66%;
-        --chart-5: 27 87% 67%;
-        --radius: 0.5rem;
-    }
-    .dark {
-        --background: 0 0% 3.9%;
-        --foreground: 0 0% 98%;
-        --card: 0 0% 3.9%;
-        --card-foreground: 0 0% 98%;
-        --popover: 0 0% 3.9%;
-        --popover-foreground: 0 0% 98%;
-        --primary: 0 0% 98%;
-        --primary-foreground: 0 0% 9%;
-        --secondary: 0 0% 14.9%;
-        --secondary-foreground: 0 0% 98%;
-        --muted: 0 0% 14.9%;
-        --muted-foreground: 0 0% 63.9%;
-        --accent: 0 0% 14.9%;
-        --accent-foreground: 0 0% 98%;
-        --destructive: 0 62.8% 30.6%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 0 0% 14.9%;
-        --input: 0 0% 14.9%;
-        --ring: 0 0% 83.1%;
-        --chart-1: 220 70% 50%;
-        --chart-2: 160 60% 45%;
-        --chart-3: 30 80% 55%;
-        --chart-4: 280 65% 60%;
-        --chart-5: 340 75% 55%;
-    }
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', sans-serif;
+    background-color: #09090b;
+    min-height: 100vh;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'JetBrains Mono', monospace;
+  }
+  
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
 }
 
-@layer base {
-    * {
-        @apply border-border;
-    }
-    body {
-        @apply bg-background text-foreground;
-    }
+/* Grid background pattern */
+.grid-background {
+  background-image: 
+    radial-gradient(circle at 50% 50%, rgba(6, 182, 212, 0.05) 0%, transparent 50%),
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 100% 100%, 40px 40px, 40px 40px;
 }
 
-@layer base {
-    [data-debug-wrapper="true"] {
-        display: contents !important;
-    }
+/* Neon glow effects */
+.neon-glow {
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.5);
+}
 
-    [data-debug-wrapper="true"] > * {
-        margin-left: inherit;
-        margin-right: inherit;
-        margin-top: inherit;
-        margin-bottom: inherit;
-        padding-left: inherit;
-        padding-right: inherit;
-        padding-top: inherit;
-        padding-bottom: inherit;
-        column-gap: inherit;
-        row-gap: inherit;
-        gap: inherit;
-        border-left-width: inherit;
-        border-right-width: inherit;
-        border-top-width: inherit;
-        border-bottom-width: inherit;
-        border-left-style: inherit;
-        border-right-style: inherit;
-        border-top-style: inherit;
-        border-bottom-style: inherit;
-        border-left-color: inherit;
-        border-right-color: inherit;
-        border-top-color: inherit;
-        border-bottom-color: inherit;
-    }
+.neon-glow-subtle {
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.3);
+}
+
+.neon-text {
+  text-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
+}
+
+/* Card hover effects */
+.card-interactive {
+  @apply transition-all duration-300;
+}
+
+.card-interactive:hover {
+  @apply border-cyan-500/50;
+  box-shadow: 0 0 15px rgba(6, 182, 212, 0.2);
+}
+
+/* Button glow */
+.btn-glow {
+  box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+}
+
+.btn-glow:hover {
+  box-shadow: 0 0 25px rgba(6, 182, 212, 0.6);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #18181b;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+
+/* Input focus ring */
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: #06b6d4 !important;
+  box-shadow: 0 0 0 1px #06b6d4;
+}
+
+/* Table styling */
+.thermal-table th {
+  @apply font-mono text-xs uppercase tracking-wider text-zinc-500 bg-zinc-900/60;
+}
+
+.thermal-table td {
+  @apply font-mono text-sm;
+}
+
+/* D3 chart styling */
+.d3-chart text {
+  fill: #a1a1aa;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+
+.d3-chart .axis-label {
+  fill: #71717a;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.d3-chart .grid line {
+  stroke: #27272a;
+  stroke-opacity: 0.5;
+}
+
+/* Status indicators */
+.status-success { @apply text-emerald-500; }
+.status-warning { @apply text-amber-500; }
+.status-error { @apply text-red-500; }
+.status-info { @apply text-blue-500; }
+
+/* Animation classes */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 10px rgba(6, 182, 212, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(6, 182, 212, 0.5); }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s infinite;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+/* Stepper progress bar */
+.stepper-progress {
+  @apply h-1 bg-zinc-800 rounded-full overflow-hidden;
+}
+
+.stepper-progress-fill {
+  @apply h-full bg-gradient-to-r from-cyan-500 to-cyan-400 transition-all duration-500;
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
+}
+
+/* Cable visualization */
+.cable-cross-section {
+  @apply rounded-full border-2;
+}
+
+.cable-conductor { @apply bg-amber-600; }
+.cable-insulation { @apply bg-zinc-700; }
+.cable-sheath { @apply bg-zinc-500; }
+.cable-jacket { @apply bg-zinc-900; }
+
+/* Temperature color scale */
+.temp-cold { color: #06b6d4; }
+.temp-warm { color: #f59e0b; }
+.temp-hot { color: #ef4444; }
+
+/* Data wrapper for visual edits */
+@layer base {
+  [data-debug-wrapper="true"] {
+    display: contents !important;
+  }
+
+  [data-debug-wrapper="true"] > * {
+    margin-left: inherit;
+    margin-right: inherit;
+    margin-top: inherit;
+    margin-bottom: inherit;
+    padding-left: inherit;
+    padding-right: inherit;
+    padding-top: inherit;
+    padding-bottom: inherit;
+    column-gap: inherit;
+    row-gap: inherit;
+    gap: inherit;
+    border-left-width: inherit;
+    border-right-width: inherit;
+    border-top-width: inherit;
+    border-bottom-width: inherit;
+    border-left-style: inherit;
+    border-right-style: inherit;
+    border-top-style: inherit;
+    border-bottom-style: inherit;
+    border-left-color: inherit;
+    border-right-color: inherit;
+    border-top-color: inherit;
+    border-bottom-color: inherit;
+  }
 }
