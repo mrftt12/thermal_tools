@@ -1,0 +1,52 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: ${MONGO_CONTAINER_NAME:-thermal_mongo}
+    restart: unless-stopped
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ${BACKEND_CONTAINER_NAME:-thermal_backend}
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGO_URL: mongodb://mongo:27017
+      DB_NAME: ${DB_NAME:-thermal_tools}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+    ports:
+      - "${BACKEND_PORT:-8100}:8100"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ${FRONTEND_CONTAINER_NAME:-thermal_frontend}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      REACT_APP_BACKEND_URL: ${REACT_APP_BACKEND_URL:-http://localhost:8100}
+      CHOKIDAR_USEPOLLING: ${CHOKIDAR_USEPOLLING:-true}
+      WATCHPACK_POLLING: ${WATCHPACK_POLLING:-true}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  mongo_data:

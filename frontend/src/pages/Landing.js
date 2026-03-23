@@ -74,7 +74,7 @@ const Landing = () => {
               <div className="w-8 h-8 rounded-lg bg-cyan-500 flex items-center justify-center">
                 <Zap className="w-5 h-5 text-black" />
               </div>
-              <span className="font-mono font-bold text-lg text-white">CableThermal</span>
+              <span className="font-mono font-bold text-lg text-white">Thermal Tools</span>
             </div>
             <nav className="hidden md:flex items-center gap-6">
               <a href="#features" className="text-zinc-400 hover:text-cyan-400 transition-colors text-sm">Features</a>

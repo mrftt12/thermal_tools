@@ -12,15 +12,26 @@ import uuid
 from datetime import datetime, timezone, timedelta
 import httpx
 import math
+import json
 import numpy as np
+import time
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+load_dotenv(ROOT_DIR.parent / '.env')
+
+COOKIE_SECURE = os.getenv("AUTH_COOKIE_SECURE", "false").lower() == "true"
+COOKIE_SAMESITE = os.getenv("AUTH_COOKIE_SAMESITE", "lax").lower()
+if COOKIE_SAMESITE not in {"lax", "strict", "none"}:
+    COOKIE_SAMESITE = "lax"
+if COOKIE_SAMESITE == "none" and not COOKIE_SECURE:
+    COOKIE_SAMESITE = "lax"
 
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
+mongo_url = os.getenv('MONGO_URL', 'mongodb://localhost:27017')
+db_name = os.getenv('DB_NAME', 'thermal_tools')
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[db_name]
 
 # Create the main app
 app = FastAPI(title="CableThermal AI - Underground Cable Thermal Analysis")
@@ -144,6 +155,7 @@ class CablePosition(BaseModel):
     position_x: float  # meters from reference
     position_y: float  # depth in meters
     current_load_a: float = 0.0
+    load_factor: float = 1.0
     phase: str = "A"  # A, B, C for three-phase
 
 class CalculationParameters(BaseModel):
@@ -152,6 +164,7 @@ class CalculationParameters(BaseModel):
     duration_hours: Optional[float] = None  # for transient
     emergency_factor: Optional[float] = None  # 1.0 to 2.5
     daily_loss_factor: float = 0.7
+    transformer_settings: Dict[str, Any] = Field(default_factory=dict)
 
 class Project(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -185,6 +198,7 @@ class CalculationResult(BaseModel):
     emergency_rating: Optional[Dict[str, Any]] = None
     calculation_method: str
     calculation_time_ms: float
+    dtr_results: Optional[Dict[str, Any]] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # ============== AUTH HELPERS ==============
@@ -286,8 +300,8 @@ async def create_session(request: Request, response: Response):
         key="session_token",
         value=session_token,
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE,
         path="/",
         max_age=7*24*60*60
     )
@@ -307,7 +321,12 @@ async def logout(request: Request, response: Response):
     if session_token:
         await db.user_sessions.delete_many({"session_token": session_token})
     
-    response.delete_cookie(key="session_token", path="/")
+    response.delete_cookie(
+        key="session_token",
+        path="/",
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE,
+    )
     return {"message": "Logged out"}
 
 # ============== CABLE LIBRARY ROUTES ==============
@@ -466,6 +485,11 @@ async def delete_project(project_id: str, user: User = Depends(get_current_user)
 # ============== THERMAL CALCULATION ENGINE ==============
 class ThermalCalculator:
     """Implementation of Neher-McGrath and IEC 60853 thermal calculations"""
+
+    @staticmethod
+    def effective_load(pos: CablePosition) -> float:
+        """Return effective load including demand/load factor."""
+        return max(pos.current_load_a, 0) * max(pos.load_factor, 0)
     
     @staticmethod
     def calculate_ac_resistance(dc_resistance: float, temp_c: float, temp_coeff: float, ac_factor: float) -> float:
@@ -561,9 +585,10 @@ class ThermalCalculator:
                         mutual_heating[i][j] = F_ij
                         # Estimate losses from other cable
                         other_cable = next((c for c in cables if c["cable_id"] == other_pos.cable_id), None)
-                        if other_cable and other_pos.current_load_a > 0:
+                        other_effective_load = ThermalCalculator.effective_load(other_pos)
+                        if other_cable and other_effective_load > 0:
                             other_r = other_cable.get("conductor", {}).get("dc_resistance_20c", 0.1)
-                            other_loss = (other_pos.current_load_a ** 2) * other_r / 1000  # W/m
+                            other_loss = (other_effective_load ** 2) * other_r / 1000  # W/m
                             delta_theta_mutual += other_loss * F_ij * daily_loss_factor
             
             # Temperature rise available for losses
@@ -583,8 +608,9 @@ class ThermalCalculator:
                 ampacity = 0
             
             # Calculate actual temperature if current is specified
-            if pos.current_load_a > 0:
-                losses = (pos.current_load_a ** 2) * r_ac / 1000  # W/m
+            effective_load = ThermalCalculator.effective_load(pos)
+            if effective_load > 0:
+                losses = (effective_load ** 2) * r_ac / 1000  # W/m
                 temp_rise = losses * T_total + delta_theta_mutual
                 actual_temp = ambient + temp_rise
             else:
@@ -598,6 +624,8 @@ class ThermalCalculator:
                 "cable_id": pos.cable_id,
                 "position": {"x": pos.position_x, "y": pos.position_y},
                 "current_load_a": pos.current_load_a,
+                "effective_load_a": round(effective_load, 2),
+                "load_factor": round(pos.load_factor, 3),
                 "temperature_c": round(actual_temp, 2),
                 "max_temperature_c": max_temp,
                 "ampacity_a": round(ampacity, 1),
@@ -669,7 +697,8 @@ class ThermalCalculator:
             # Estimated temperature at emergency load
             current_ratio = emergency_ampacity / base_ampacity if base_ampacity > 0 else 1
             temp_rise = (emergency_temp - max_normal_temp) * (current_ratio ** 2 - 1) / (current_ratio ** 2)
-            estimated_temp = temp_result["temperature_c"] + temp_rise * (pos.current_load_a / base_ampacity if base_ampacity > 0 else 0) ** 2
+            effective_load = ThermalCalculator.effective_load(pos)
+            estimated_temp = temp_result["temperature_c"] + temp_rise * (effective_load / base_ampacity if base_ampacity > 0 else 0) ** 2
             
             emergency_results.append({
                 "cable_id": cable_id,
@@ -731,6 +760,312 @@ class ThermalCalculator:
         
         return time_series
 
+    @staticmethod
+    def c57_transformer_analysis(
+        cables: List[Dict],
+        cable_positions: List[CablePosition],
+        installation: InstallationConfig,
+        parameters: CalculationParameters,
+    ) -> Dict:
+        """Run IEEE C57.91-2011 style transformer thermal analysis using DTR module."""
+        start_time = time.time()
+
+        try:
+            from dtr_system import (
+                DTRSystemIntegration,
+                DynamicRatingCalculator,
+                EVChargingProfile,
+                EVLoadForecaster,
+                RiskAssessment,
+                ThermalModel,
+                TransformerParameters,
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"C57.91-2011 analysis dependencies are unavailable: {exc}",
+            )
+
+        if not cable_positions:
+            return {
+                "cable_temperatures": [],
+                "ampacity_values": [],
+                "mutual_heating": [],
+                "hotspot_info": {},
+                "calculation_time_ms": round((time.time() - start_time) * 1000, 2),
+            }
+
+        settings = parameters.transformer_settings or {}
+
+        # Build TransformerParameters from user settings
+        fan_trigger_temps = settings.get("fan_trigger_temps")
+        if fan_trigger_temps is None:
+            t1 = float(settings.get("fan_trigger_temp_1", 65.0))
+            t2 = float(settings.get("fan_trigger_temp_2", 75.0))
+            fan_trigger_temps = [t1, t2]
+        fan_capacities = settings.get("fan_capacities")
+        if fan_capacities is None:
+            c1 = float(settings.get("fan_capacity_1", 1.3))
+            c2 = float(settings.get("fan_capacity_2", 1.6))
+            fan_capacities = [c1, c2]
+
+        transformer_params = TransformerParameters(
+            rated_power=float(settings.get("rated_power_mva", 50.0)),
+            top_oil_rise_rated=float(settings.get("top_oil_rise_rated", 55.0)),
+            hot_spot_rise_rated=float(settings.get("hot_spot_rise_rated", 65.0)),
+            oil_time_constant=float(settings.get("oil_time_constant_min", 90.0)),
+            winding_time_constant=float(settings.get("winding_time_constant_min", 7.0)),
+            no_load_loss=float(settings.get("no_load_loss_kw", 35.0)),
+            load_loss_rated=float(settings.get("load_loss_rated_kw", 235.0)),
+            num_cooling_stages=int(settings.get("num_cooling_stages", 2)),
+            fan_trigger_temps=fan_trigger_temps,
+            fan_capacities=fan_capacities,
+            normal_hot_spot_limit=float(settings.get("normal_hot_spot_limit_c", 110.0)),
+            emergency_hot_spot_limit=float(settings.get("emergency_hot_spot_limit_c", 140.0)),
+        )
+
+        # Build EVChargingProfile from user settings
+        weekday_peak_start = int(settings.get("ev_weekday_peak_start", 18))
+        weekday_peak_end = int(settings.get("ev_weekday_peak_end", 22))
+        weekend_peak_start = int(settings.get("ev_weekend_peak_start", 11))
+        weekend_peak_end = int(settings.get("ev_weekend_peak_end", 16))
+
+        ev_profile = EVChargingProfile(
+            num_chargers_l2=int(settings.get("ev_num_chargers_l2", 100)),
+            num_chargers_dcfc=int(settings.get("ev_num_chargers_dcfc", 10)),
+            power_l2=float(settings.get("ev_power_l2_kw", 11.0)),
+            power_dcfc=float(settings.get("ev_power_dcfc_kw", 150.0)),
+            coincidence_factor_l2=float(settings.get("ev_coincidence_l2", 0.25)),
+            coincidence_factor_dcfc=float(settings.get("ev_coincidence_dcfc", 0.6)),
+            seasonal_factor=float(settings.get("ev_seasonal_factor", 1.0)),
+            weekday_peak_hours=list(range(weekday_peak_start, weekday_peak_end + 1)),
+            weekend_peak_hours=list(range(weekend_peak_start, weekend_peak_end + 1)),
+        )
+
+        # Initialize models
+        thermal_model = ThermalModel(transformer_params)
+        rating_calculator = DynamicRatingCalculator(thermal_model)
+        risk_assessor = RiskAssessment(thermal_model)
+        system_integration = DTRSystemIntegration()
+
+        # Determine base load
+        total_effective_load_a = sum(ThermalCalculator.effective_load(pos) for pos in cable_positions)
+        base_load_mw = float(settings.get("base_load_mw", max(10.0, total_effective_load_a * 0.02)))
+
+        # Generate forecast
+        forecaster = EVLoadForecaster(ev_profile)
+        weekly_forecast = forecaster.forecast_weekly_load(base_load_mw=base_load_mw)
+
+        # Determine analysis horizon
+        analysis_horizon = int(settings.get("analysis_horizon_hours", 168))
+        if parameters.calculation_type == "transient" and parameters.duration_hours:
+            horizon_hours = min(int(max(parameters.duration_hours, 1)), len(weekly_forecast))
+        else:
+            horizon_hours = min(analysis_horizon, len(weekly_forecast))
+
+        forecast_slice = weekly_forecast.iloc[:horizon_hours].copy()
+        time_axis = np.arange(horizon_hours)
+        ambient_base = installation.ambient_temp_c
+        ambient_swing = float(settings.get("ambient_daily_swing_c", 4.0))
+        ambient_temps = ambient_base + ambient_swing * np.sin(2 * np.pi * time_axis / 24 - np.pi / 2)
+
+        # Core calculations
+        ratings_df = rating_calculator.calculate_hourly_ratings(forecast_slice, ambient_temps)
+        thermal_response = thermal_model.simulate_thermal_response(
+            forecast_slice["load_pu"].to_numpy(),
+            ambient_temps,
+        )
+        lol_result = thermal_model.calculate_loss_of_life(thermal_response["hot_spot"])
+        health = risk_assessor.calculate_health_index(thermal_response, {"operational_score": 85})
+
+        # Cooling optimization
+        energy_cost = float(settings.get("energy_cost_per_kwh", 0.08))
+        cooling_optimization = rating_calculator.optimize_cooling_schedule(ratings_df, energy_cost)
+
+        # Monte Carlo risk assessment
+        num_simulations = int(settings.get("num_simulations", 500))
+        risk_results = risk_assessor.monte_carlo_analysis(forecast_slice, ambient_temps, num_simulations)
+
+        # Economic analysis
+        additional_capacity_mva = (float(ratings_df["normal_rating_mva"].mean()) - transformer_params.rated_power)
+        dtr_benefits = {
+            "additional_capacity_mva": max(0, additional_capacity_mva),
+            "cooling_savings": cooling_optimization["total_daily_savings"],
+            "deferred_investment": float(settings.get("deferred_investment", 2000000)),
+        }
+        implementation_cost = float(settings.get("implementation_cost", 250000))
+        economic_results = risk_assessor.economic_analysis(dtr_benefits, implementation_cost)
+
+        # System integration
+        scada_points = system_integration.generate_scada_points(thermal_response, ratings_df)
+        iec_report_json = system_integration.export_iec61850_report(thermal_response, ratings_df, health)
+
+        # Build cable-compatible results
+        current_load_pu = float(forecast_slice["load_pu"].iloc[-1]) if horizon_hours > 0 else 0.0
+        normal_rating_pu = float(ratings_df["normal_rating_pu"].iloc[-1]) if horizon_hours > 0 else 0.0
+        emergency_rating_pu = float(ratings_df["emergency_rating_pu"].iloc[-1]) if horizon_hours > 0 else 0.0
+        ampacity_factor = normal_rating_pu / max(current_load_pu, 0.01)
+        emergency_factor = emergency_rating_pu / max(current_load_pu, 0.01)
+
+        hot_spot_temp = float(thermal_response["hot_spot"][-1]) if horizon_hours > 0 else ambient_base
+        top_oil_temp = float(thermal_response["top_oil"][-1]) if horizon_hours > 0 else ambient_base
+
+        cable_temperatures = []
+        ampacity_values = []
+        emergency_ratings = []
+
+        for pos in cable_positions:
+            effective = ThermalCalculator.effective_load(pos)
+            normal_ampacity_a = round(max(effective * ampacity_factor, effective), 1)
+            emergency_ampacity_a = round(max(effective * emergency_factor, normal_ampacity_a), 1)
+
+            cable_temperatures.append({
+                "cable_id": pos.cable_id,
+                "position": {"x": pos.position_x, "y": pos.position_y},
+                "current_load_a": round(pos.current_load_a, 2),
+                "effective_load_a": round(effective, 2),
+                "load_factor": round(pos.load_factor, 3),
+                "temperature_c": round(hot_spot_temp, 2),
+                "max_temperature_c": transformer_params.normal_hot_spot_limit,
+                "ampacity_a": normal_ampacity_a,
+                "derating_factor": round(normal_rating_pu / max(1.0, emergency_rating_pu), 3),
+                "thermal_resistance_total": 0.0,
+                "thermal_resistance_soil": 0.0,
+                "mutual_heating_rise_c": 0.0,
+            })
+
+            ampacity_values.append({
+                "cable_id": pos.cable_id,
+                "ampacity_a": normal_ampacity_a,
+                "derating": round(normal_rating_pu / max(1.0, emergency_rating_pu), 3),
+            })
+
+            emergency_ratings.append({
+                "cable_id": pos.cable_id,
+                "emergency_ampacity_a": emergency_ampacity_a,
+                "emergency_factor": round(emergency_factor, 2),
+                "duration_hours": parameters.duration_hours or 2.0,
+                "max_emergency_temp_c": transformer_params.emergency_hot_spot_limit,
+                "estimated_temp_c": round(min(hot_spot_temp * 1.1, transformer_params.emergency_hot_spot_limit), 2),
+            })
+
+        # Serialize numpy/pandas for JSON
+        def to_json_safe(val):
+            if isinstance(val, (np.integer,)):
+                return int(val)
+            if isinstance(val, (np.floating,)):
+                return float(val)
+            if isinstance(val, np.ndarray):
+                return val.tolist()
+            if isinstance(val, (np.bool_,)):
+                return bool(val)
+            return val
+
+        def serialize_dict(d):
+            return {k: to_json_safe(v) for k, v in d.items()}
+
+        # Build the rich DTR results
+        dtr_results = {
+            "forecast": {
+                "time_index": forecast_slice["time_index"].tolist(),
+                "days": forecast_slice["day"].tolist(),
+                "hours": forecast_slice["hour"].tolist(),
+                "base_load_mw": forecast_slice["base_load_mw"].tolist(),
+                "ev_load_mw": forecast_slice["ev_load_mw"].tolist(),
+                "total_load_mw": forecast_slice["total_load_mw"].tolist(),
+                "load_pu": forecast_slice["load_pu"].tolist(),
+            },
+            "thermal": {
+                "time": thermal_response["time"].tolist(),
+                "top_oil": thermal_response["top_oil"].tolist(),
+                "hot_spot": thermal_response["hot_spot"].tolist(),
+                "ambient": thermal_response["ambient"].tolist(),
+                "load_pu": thermal_response["load_pu"].tolist(),
+            },
+            "loss_of_life": {
+                "lol_percent": float(lol_result["lol_percent"]),
+                "feqa": float(lol_result["feqa"]),
+                "lol_hours": float(lol_result["lol_hours"]),
+                "peak_faa": float(lol_result["peak_faa"]),
+            },
+            "ratings": {
+                "time_index": ratings_df["time_index"].tolist(),
+                "normal_rating_mva": ratings_df["normal_rating_mva"].tolist(),
+                "emergency_rating_mva": ratings_df["emergency_rating_mva"].tolist(),
+                "utilization_normal": ratings_df["utilization_normal"].tolist(),
+                "margin_normal": ratings_df["margin_normal"].tolist(),
+                "ambient_temp": ratings_df["ambient_temp"].tolist(),
+                "load_pu": ratings_df["load_pu"].tolist(),
+            },
+            "cooling": {
+                "cooling_schedule": [int(x) for x in cooling_optimization["cooling_schedule"]],
+                "hourly_savings": [float(x) for x in cooling_optimization["hourly_savings"]],
+                "total_daily_savings": float(cooling_optimization["total_daily_savings"]),
+                "annual_savings_estimate": float(cooling_optimization["annual_savings_estimate"]),
+                "energy_efficiency": float(cooling_optimization["energy_efficiency"]),
+            },
+            "risk": {
+                "lol_percentiles": risk_results["lol_percentiles"].tolist(),
+                "hot_spot_max_percentiles": risk_results["hot_spot_max_percentiles"].tolist(),
+                "overload_probability": float(risk_results["overload_probability"]),
+                "mean_lol": float(risk_results["mean_lol"]),
+                "std_lol": float(risk_results["std_lol"]),
+            },
+            "health": {
+                "health_index": float(health["health_index"]),
+                "category": health["category"],
+                "thermal_component": float(health["thermal_component"]),
+                "loading_component": float(health["loading_component"]),
+                "temperature_component": float(health["temperature_component"]),
+                "operational_component": float(health["operational_component"]),
+                "recommendations": health["recommendations"],
+            },
+            "economic": serialize_dict(economic_results),
+            "scada": serialize_dict(scada_points),
+            "iec_61850_report": json.loads(iec_report_json),
+        }
+
+        result = {
+            "cable_temperatures": cable_temperatures,
+            "ampacity_values": ampacity_values,
+            "mutual_heating": [[0.0] * len(cable_positions) for _ in cable_positions],
+            "hotspot_info": {
+                "cable_id": cable_positions[0].cable_id,
+                "temperature_c": round(hot_spot_temp, 2),
+                "max_temperature_c": transformer_params.normal_hot_spot_limit,
+                "margin_c": round(transformer_params.normal_hot_spot_limit - hot_spot_temp, 2),
+                "top_oil_temp_c": round(top_oil_temp, 2),
+                "loss_of_life_percent": round(float(lol_result["lol_percent"]), 4),
+                "health_index": round(float(health["health_index"]), 2),
+                "health_category": health["category"],
+                "normal_rating_mva": round(float(ratings_df["normal_rating_mva"].iloc[-1]), 2),
+                "emergency_rating_mva": round(float(ratings_df["emergency_rating_mva"].iloc[-1]), 2),
+            },
+            "dtr_results": dtr_results,
+            "calculation_time_ms": round((time.time() - start_time) * 1000, 2),
+        }
+
+        if parameters.calculation_type == "transient":
+            result["time_series"] = [
+                {
+                    "time_hours": float(i),
+                    "temperatures": {
+                        pos.cable_id: round(float(thermal_response["hot_spot"][i]), 2)
+                        for pos in cable_positions
+                    },
+                }
+                for i in range(horizon_hours)
+            ]
+
+        if parameters.emergency_factor and parameters.emergency_factor > 1.0:
+            result["emergency_rating"] = {
+                "emergency_ratings": emergency_ratings,
+                "duration_hours": parameters.duration_hours or 2.0,
+                "requested_factor": parameters.emergency_factor,
+            }
+
+        return result
+
 # ============== CALCULATION ROUTES ==============
 @api_router.post("/calculate/{project_id}")
 async def run_calculation(project_id: str, user: User = Depends(get_current_user)):
@@ -756,6 +1091,10 @@ async def run_calculation(project_id: str, user: User = Depends(get_current_user
         result = ThermalCalculator.neher_mcgrath_steady_state(
             cables, cable_positions, installation, parameters.daily_loss_factor
         )
+    elif parameters.method == "c57_91_2011":
+        result = ThermalCalculator.c57_transformer_analysis(
+            cables, cable_positions, installation, parameters
+        )
     else:
         # IEC 60853 - use same base calculation for now
         result = ThermalCalculator.neher_mcgrath_steady_state(
@@ -763,13 +1102,13 @@ async def run_calculation(project_id: str, user: User = Depends(get_current_user
         )
     
     # Transient analysis if requested
-    if parameters.calculation_type == "transient" and parameters.duration_hours:
+    if parameters.method != "c57_91_2011" and parameters.calculation_type == "transient" and parameters.duration_hours:
         result["time_series"] = ThermalCalculator.transient_analysis(
             cables, cable_positions, installation, parameters.duration_hours
         )
     
     # Emergency rating if requested
-    if parameters.emergency_factor and parameters.emergency_factor > 1.0:
+    if parameters.method != "c57_91_2011" and parameters.emergency_factor and parameters.emergency_factor > 1.0:
         result["emergency_rating"] = ThermalCalculator.calculate_emergency_rating(
             result, parameters.emergency_factor,
             parameters.duration_hours or 2.0,
@@ -786,7 +1125,8 @@ async def run_calculation(project_id: str, user: User = Depends(get_current_user
         time_series=result.get("time_series"),
         emergency_rating=result.get("emergency_rating"),
         calculation_method=parameters.method,
-        calculation_time_ms=result.get("calculation_time_ms", 0)
+        calculation_time_ms=result.get("calculation_time_ms", 0),
+        dtr_results=result.get("dtr_results"),
     )
     
     doc = calc_result.model_dump()

@@ -1,10 +1,11 @@
 import { useAuth } from "@/App";
 import { useNavigate, useLocation } from "react-router-dom";
-import { 
-  Zap, 
-  LayoutDashboard, 
-  Database, 
-  Calculator, 
+import {
+  Zap,
+  LayoutDashboard,
+  Database,
+  Calculator,
+  Thermometer,
   LogOut,
   User,
   ChevronLeft,
@@ -31,9 +32,16 @@ const Sidebar = ({ children }) => {
     { icon: <LayoutDashboard className="w-5 h-5" />, label: "Dashboard", path: "/dashboard" },
     { icon: <Database className="w-5 h-5" />, label: "Cable Library", path: "/cables" },
     { icon: <Calculator className="w-5 h-5" />, label: "New Calculation", path: "/calculate" },
+    { icon: <Thermometer className="w-5 h-5" />, label: "DTR Analysis", path: "/calculate?method=c57_91_2011" },
   ];
 
-  const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + '/');
+  const isActive = (path) => {
+    const [pathPart, queryPart] = path.split('?');
+    if (queryPart) {
+      return location.pathname === pathPart && location.search === `?${queryPart}`;
+    }
+    return (location.pathname === pathPart || location.pathname.startsWith(pathPart + '/')) && !location.search;
+  };
 
   return (
     <div className="min-h-screen bg-zinc-950 grid-background">
@@ -46,7 +54,7 @@ const Sidebar = ({ children }) => {
               <Zap className="w-5 h-5 text-black" />
             </div>
             {!collapsed && (
-              <span className="font-mono font-bold text-white whitespace-nowrap">CableThermal</span>
+              <span className="font-mono font-bold text-white whitespace-nowrap">Thermal Tools</span>
             )}
           </div>
           <button 
