@@ -1,4 +1,3 @@
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useMemo, useState } from 'react';
 import {
@@ -9,17 +8,16 @@ import {
   Text,
   View,
 } from 'react-native';
-import { RootStackParamList } from '../../App';
 import { useDevice } from '../context/DeviceContext';
+import { useThemeColors } from '../context/ThemeContext';
 import { mobileApi } from '../lib/api';
 import { CalculationResult } from '../types/api';
-import { colors } from '../theme';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Results'>;
-
-export function ResultsScreen({ route }: Props) {
+export function ResultsScreen({ route }: { route: any }) {
   const { projectId } = route.params;
   const { deviceId } = useDevice();
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [results, setResults] = useState<CalculationResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -78,7 +76,7 @@ export function ResultsScreen({ route }: Props) {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>{String(item.cable_id)}</Text>
             <Text style={styles.cardMeta}>Ampacity: {String(item.ampacity_a ?? 'N/A')} A</Text>
-            <Text style={styles.cardMeta}>Derating: {String(item.derating_factor ?? 'N/A')}</Text>
+            <Text style={styles.cardMeta}>Derating: {String(item.derating_factor ?? item.derating ?? 'N/A')}</Text>
             <Text style={styles.cardMeta}>Operating Temp: {String(item.operating_temp_c ?? 'N/A')} °C</Text>
           </View>
         )}
@@ -88,58 +86,59 @@ export function ResultsScreen({ route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    backgroundColor: colors.background,
-    padding: 16,
-    gap: 10,
-  },
-  loaderWrap: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  highlightCard: {
-    backgroundColor: '#0f172a',
-    borderWidth: 1,
-    borderColor: colors.cyanMuted,
-    borderRadius: 14,
-    padding: 12,
-    gap: 5,
-  },
-  highlightTitle: {
-    color: colors.textPrimary,
-    fontWeight: '700',
-  },
-  highlightMeta: {
-    color: '#bae6fd',
-    fontSize: 13,
-  },
-  listContent: {
-    gap: 10,
-    paddingBottom: 30,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: 12,
-    gap: 4,
-  },
-  cardTitle: {
-    color: colors.textPrimary,
-    fontWeight: '700',
-  },
-  cardMeta: {
-    color: colors.textSecondary,
-    fontSize: 12,
-  },
-  emptyText: {
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 16,
-  },
-});
+const createStyles = (colors: ReturnType<typeof useThemeColors>) =>
+  StyleSheet.create({
+    page: {
+      flex: 1,
+      backgroundColor: colors.background,
+      padding: 16,
+      gap: 10,
+    },
+    loaderWrap: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: colors.background,
+    },
+    highlightCard: {
+      backgroundColor: colors.secondarySurface,
+      borderWidth: 1,
+      borderColor: colors.cyanMuted,
+      borderRadius: 14,
+      padding: 12,
+      gap: 5,
+    },
+    highlightTitle: {
+      color: colors.textPrimary,
+      fontWeight: '700',
+    },
+    highlightMeta: {
+      color: colors.textPrimary,
+      fontSize: 13,
+    },
+    listContent: {
+      gap: 10,
+      paddingBottom: 30,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      padding: 12,
+      gap: 4,
+    },
+    cardTitle: {
+      color: colors.textPrimary,
+      fontWeight: '700',
+    },
+    cardMeta: {
+      color: colors.textSecondary,
+      fontSize: 12,
+    },
+    emptyText: {
+      color: colors.textSecondary,
+      textAlign: 'center',
+      marginTop: 16,
+    },
+  });

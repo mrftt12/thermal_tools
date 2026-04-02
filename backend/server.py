@@ -15,6 +15,7 @@ import math
 import json
 import numpy as np
 import time
+from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -42,6 +43,14 @@ api_router = APIRouter(prefix="/api")
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+THERMAL_EXPERT_SYSTEM_PROMPT = (
+    "You are Thermal Modeling Expert AI for underground power cable analysis. "
+    "Provide concise, practical, and technically accurate guidance using principles from "
+    "Neher-McGrath, transient thermal behavior, IEC-style derating thinking, and utility "
+    "engineering best practices. Explain assumptions, mention safety margins, and avoid "
+    "inventing numeric standards if unknown."
+)
 
 # ============== AUTH MODELS ==============
 class User(BaseModel):
@@ -201,6 +210,15 @@ class CalculationResult(BaseModel):
     dtr_results: Optional[Dict[str, Any]] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+class MobileAIChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+    session_id: Optional[str] = "default"
+
+class MobileAIMessage(BaseModel):
+    role: str
+    content: str
+    created_at: str
+
 # ============== AUTH HELPERS ==============
 async def get_current_user(request: Request) -> User:
     """Get current user from session token"""
@@ -256,6 +274,14 @@ async def get_mobile_owner_id(request: Request) -> str:
         raise HTTPException(status_code=400, detail="x-mobile-device-id header or device_id query param is required")
 
     return f"mobile_{_sanitize_device_id(raw_device_id)}"
+
+
+def _normalize_mobile_ai_session(owner_id: str, raw_session_id: Optional[str]) -> str:
+    base = raw_session_id or "default"
+    sanitized = "".join(ch for ch in base if ch.isalnum() or ch in {"-", "_"})
+    if not sanitized:
+        sanitized = "default"
+    return f"{owner_id}_{sanitized[:64]}"
 
 
 # ============== AUTH ROUTES ==============
@@ -798,6 +824,121 @@ async def get_mobile_results(project_id: str, owner_id: str = Depends(get_mobile
 async def seed_mobile_cables():
     """Allow mobile clients to seed shared cable library when empty."""
     return await seed_cables()
+
+
+@api_router.get("/mobile/ai/messages")
+async def get_mobile_ai_messages(
+    owner_id: str = Depends(get_mobile_owner_id),
+    session_id: Optional[str] = "default",
+    limit: int = 80,
+):
+    """Get persistent AI chat history for this device and session."""
+    normalized_session = _normalize_mobile_ai_session(owner_id, session_id)
+    safe_limit = max(1, min(limit, 200))
+
+    messages = await db.mobile_ai_messages.find(
+        {"owner_id": owner_id, "session_id": normalized_session},
+        {"_id": 0},
+    ).sort("created_at", 1).limit(safe_limit).to_list(safe_limit)
+
+    return {
+        "session_id": normalized_session,
+        "messages": messages,
+    }
+
+
+@api_router.post("/mobile/ai/chat")
+async def mobile_ai_chat(
+    payload: MobileAIChatRequest,
+    owner_id: str = Depends(get_mobile_owner_id),
+):
+    """AI thermal modeling expert chat endpoint for mobile clients."""
+    api_key = os.getenv("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="EMERGENT_LLM_KEY is not configured on backend",
+        )
+
+    user_message = payload.message.strip()
+    if not user_message:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    normalized_session = _normalize_mobile_ai_session(owner_id, payload.session_id)
+
+    history_rows = await db.mobile_ai_messages.find(
+        {"owner_id": owner_id, "session_id": normalized_session},
+        {"_id": 0},
+    ).sort("created_at", -1).limit(20).to_list(20)
+    history_rows.reverse()
+
+    history_text = "\n".join(
+        f"{row.get('role', 'user').capitalize()}: {row.get('content', '')}"
+        for row in history_rows
+    )
+    llm_input = (
+        "Conversation history (oldest first):\n"
+        f"{history_text if history_text else 'No previous messages.'}\n\n"
+        f"Current user question: {user_message}"
+    )
+
+    try:
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=normalized_session,
+            system_message=THERMAL_EXPERT_SYSTEM_PROMPT,
+        ).with_model("openai", "gpt-5.2")
+
+        llm_response = await chat.send_message(UserMessage(text=llm_input))
+        if isinstance(llm_response, str):
+            assistant_message = llm_response
+        elif isinstance(llm_response, dict):
+            assistant_message = str(
+                llm_response.get("text")
+                or llm_response.get("response")
+                or llm_response
+            )
+        else:
+            assistant_message = str(getattr(llm_response, "text", llm_response))
+
+        assistant_message = assistant_message.strip()
+        if not assistant_message:
+            assistant_message = "I could not generate a response. Please try again."
+
+    except Exception as exc:
+        logger.exception("Mobile AI chat failed")
+        raise HTTPException(status_code=500, detail=f"AI chat failed: {exc}")
+
+    created_at = datetime.now(timezone.utc).isoformat()
+    user_doc = {
+        "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+        "owner_id": owner_id,
+        "session_id": normalized_session,
+        "role": "user",
+        "content": user_message,
+        "created_at": created_at,
+    }
+    assistant_doc = {
+        "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+        "owner_id": owner_id,
+        "session_id": normalized_session,
+        "role": "assistant",
+        "content": assistant_message,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    await db.mobile_ai_messages.insert_many([user_doc, assistant_doc])
+
+    # Create clean copies without MongoDB _id for response
+    clean_user_doc = {k: v for k, v in user_doc.items() if k != "_id"}
+    clean_assistant_doc = {k: v for k, v in assistant_doc.items() if k != "_id"}
+
+    return {
+        "session_id": normalized_session,
+        "assistant_message": assistant_message,
+        "messages": [clean_user_doc, clean_assistant_doc],
+    }
+
 
 # ============== THERMAL CALCULATION ENGINE ==============
 class ThermalCalculator:

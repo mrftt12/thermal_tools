@@ -1,6 +1,5 @@
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -11,16 +10,16 @@ import {
   Text,
   View,
 } from 'react-native';
-import { RootStackParamList } from '../../App';
 import { useDevice } from '../context/DeviceContext';
+import { useThemeColors } from '../context/ThemeContext';
 import { mobileApi } from '../lib/api';
 import { Project } from '../types/api';
-import { colors } from '../theme';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Projects'>;
-
-export function ProjectsScreen({ navigation }: Props) {
+export function ProjectsScreen({ navigation }: { navigation: any }) {
   const { deviceId } = useDevice();
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -88,68 +87,69 @@ export function ProjectsScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    backgroundColor: colors.background,
-    padding: 16,
-    gap: 10,
-  },
-  createButton: {
-    backgroundColor: colors.cyan,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  createButtonText: {
-    color: '#06242a',
-    fontWeight: '700',
-  },
-  loaderWrap: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  listContent: {
-    gap: 10,
-    paddingBottom: 24,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: 12,
-    gap: 8,
-  },
-  cardTitle: {
-    color: colors.textPrimary,
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  cardMeta: {
-    color: colors.textSecondary,
-    fontSize: 12,
-  },
-  rowBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  cardTag: {
-    color: '#a5f3fc',
-    fontSize: 11,
-    borderWidth: 1,
-    borderColor: colors.cyanMuted,
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    overflow: 'hidden',
-    fontWeight: '700',
-  },
-  emptyText: {
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 20,
-  },
-});
+const createStyles = (colors: ReturnType<typeof useThemeColors>) =>
+  StyleSheet.create({
+    page: {
+      flex: 1,
+      backgroundColor: colors.background,
+      padding: 16,
+      gap: 10,
+    },
+    createButton: {
+      backgroundColor: colors.cyan,
+      borderRadius: 12,
+      paddingVertical: 12,
+      alignItems: 'center',
+    },
+    createButtonText: {
+      color: colors.primaryTextOnCyan,
+      fontWeight: '700',
+    },
+    loaderWrap: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    listContent: {
+      gap: 10,
+      paddingBottom: 24,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      padding: 12,
+      gap: 8,
+    },
+    cardTitle: {
+      color: colors.textPrimary,
+      fontWeight: '700',
+      fontSize: 16,
+    },
+    cardMeta: {
+      color: colors.textSecondary,
+      fontSize: 12,
+    },
+    rowBetween: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    cardTag: {
+      color: colors.cyan,
+      fontSize: 11,
+      borderWidth: 1,
+      borderColor: colors.cyanMuted,
+      borderRadius: 999,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      overflow: 'hidden',
+      fontWeight: '700',
+    },
+    emptyText: {
+      color: colors.textSecondary,
+      textAlign: 'center',
+      marginTop: 20,
+    },
+  });

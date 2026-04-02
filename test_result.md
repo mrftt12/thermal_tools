@@ -118,6 +118,12 @@ backend:
       - working: true
         agent: "testing"
         comment: "✅ ALL 14 MOBILE API ENDPOINTS TESTED SUCCESSFULLY: GET /api/mobile/stats (dashboard stats), POST /api/mobile/seed-cables (cable seeding), GET /api/mobile/cables (with/without search), POST/PUT/DELETE /api/mobile/cables (CRUD operations), GET/POST/PUT/DELETE /api/mobile/projects (project management), POST /api/mobile/calculate/{project_id} (thermal calculations), GET /api/mobile/results/{project_id} (results retrieval). Device-scoped isolation verified - devices cannot access each other's custom cables/projects. All endpoints return correct status codes and payload structures. Thermal calculation engine working properly with Neher-McGrath method."
+      - working: "NA"
+        agent: "main"
+        comment: "Enhanced backend with EMERGENT_LLM_KEY-powered AI chat endpoints: GET /api/mobile/ai/messages and POST /api/mobile/ai/chat (OpenAI gpt-5.2 via emergentintegrations), persistent device-scoped history, plus session normalization helpers."
+      - working: true
+        agent: "testing"
+        comment: "✅ AI ENDPOINTS AND TRANSIENT SUPPORT FULLY TESTED: (1) AI Chat: POST /api/mobile/ai/chat working with device header x-mobile-device-id:device_ai_12345678, tested messages 'Explain Neher-McGrath in simple terms' and 'How does transient heating differ?' - both returned detailed technical responses. GET /api/mobile/ai/messages confirmed persistent ordered history with device scoping (session_id: mobile_device_ai_12345678_default). (2) Transient Projects: Successfully created project with method=neher_mcgrath, calculation_type=transient, duration_hours=4.0, emergency_factor=1.5. POST /api/mobile/calculate returned results with time_series (51 time points) and emergency_rating data. GET /api/mobile/results verified no schema failures. (3) Regression: /api/mobile/stats and /api/mobile/cables working correctly. FIXED: ObjectId serialization issue in AI chat response. All 7 test scenarios passed (100% success rate)."
 frontend:
   - task: "Expo mobile app core implementation"
     implemented: true
@@ -139,10 +145,11 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 3
+  test_sequence: 4
   run_ui: false
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Mobile guest API endpoints for Expo app"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -154,6 +161,10 @@ agent_communication:
   - agent: "testing"
     message: "✅ FRONTEND SMOKE VALIDATION COMPLETE: Code structure validation passed. TypeScript compilation successful. All screens properly implemented with correct navigation, API integration, and error handling. No runtime-blocking issues found. App is iOS-first mobile (cannot test in web preview without additional dependencies). Ready for testing on actual iOS simulator/device."
   - agent: "main"
-    message: "Please validate current preview behavior after recent change. Goal: confirm that the main preview URL now serves the Expo web app from /app/mobile."
+    message: "Please validate current preview behavior after recent change. Goal: confirm that the main preview URL now serves Expo web app from /app/mobile."
   - agent: "testing"
-    message: "✅ EXPO WEB PREVIEW VALIDATION COMPLETE: Fixed missing dependency (react-native-gesture-handler) that was blocking bundle compilation. Preview URL now successfully serves Expo web app with full dashboard functionality. All review requirements met: page loads, app mounts without blank screen, dashboard content visible with stats and workflow buttons. No blocking errors. Minor fix applied: added web title to app.json."
+    message: "✅ EXPO WEB PREVIEW VALIDATION COMPLETE: Fixed missing dependency (react-native-gesture-handler) that was blocking bundle compilation. Preview URL now successfully serves Expo web app with full dashboard functionality. All review requirements met: page loads, app mounts without blank screen, dashboard content visible with stats and workflow buttons. No blocking errors."
+  - agent: "main"
+    message: "Please test updated backend for AI and transient workflows: (1) POST /api/mobile/ai/chat + GET /api/mobile/ai/messages persistence with x-mobile-device-id, (2) existing /api/mobile/projects + /api/mobile/calculate should handle transient payload (method=neher_mcgrath, calculation_type=transient, duration_hours, emergency_factor)."
+  - agent: "testing"
+    message: "✅ ENHANCED MOBILE BACKEND TESTING COMPLETE: All requested features tested successfully. AI endpoints working with proper device scoping and message persistence. Transient thermal analysis fully functional with emergency factor support. Fixed ObjectId serialization bug in AI chat response. No regressions in existing mobile endpoints. Backend ready for production use with AI-powered thermal modeling assistance."

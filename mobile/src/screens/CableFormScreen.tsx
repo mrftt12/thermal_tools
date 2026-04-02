@@ -1,4 +1,3 @@
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -10,17 +9,17 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { RootStackParamList } from '../../App';
 import { useDevice } from '../context/DeviceContext';
+import { useThemeColors } from '../context/ThemeContext';
 import { mobileApi } from '../lib/api';
 import { CableCreatePayload } from '../types/api';
-import { colors } from '../theme';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'CableForm'>;
-
-export function CableFormScreen({ route, navigation }: Props) {
+export function CableFormScreen({ route, navigation }: { route: any; navigation: any }) {
   const cableId = route.params?.cableId;
   const { deviceId } = useDevice();
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -165,68 +164,70 @@ export function CableFormScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  content: {
-    padding: 16,
-    gap: 12,
-  },
-  loaderWrap: {
-    flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    color: colors.textPrimary,
-    fontSize: 22,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  inputCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
-    padding: 12,
-    gap: 8,
-  },
-  label: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    marginTop: 4,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: '#0b1120',
-    borderRadius: 10,
-    color: colors.textPrimary,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-  },
-  saveButton: {
-    backgroundColor: colors.cyan,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  saveButtonText: {
-    color: '#06242a',
-    fontWeight: '700',
-  },
-  deleteButton: {
-    borderWidth: 1,
-    borderColor: colors.danger,
-    borderRadius: 12,
-    paddingVertical: 11,
-    alignItems: 'center',
-  },
-  deleteButtonText: {
-    color: colors.danger,
-    fontWeight: '700',
-  },
-});
+const createStyles = (colors: ReturnType<typeof useThemeColors>) =>
+  StyleSheet.create({
+    page: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    content: {
+      padding: 16,
+      gap: 12,
+    },
+    loaderWrap: {
+      flex: 1,
+      backgroundColor: colors.background,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    title: {
+      color: colors.textPrimary,
+      fontSize: 22,
+      fontWeight: '700',
+      marginBottom: 4,
+    },
+    inputCard: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      padding: 12,
+      gap: 8,
+    },
+    label: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      marginTop: 4,
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.secondarySurface,
+      borderRadius: 10,
+      color: colors.textPrimary,
+      paddingHorizontal: 10,
+      paddingVertical: 9,
+    },
+    saveButton: {
+      backgroundColor: colors.cyan,
+      borderRadius: 12,
+      paddingVertical: 12,
+      alignItems: 'center',
+    },
+    saveButtonText: {
+      color: colors.primaryTextOnCyan,
+      fontWeight: '700',
+    },
+    deleteButton: {
+      borderWidth: 1,
+      borderColor: colors.danger,
+      borderRadius: 12,
+      paddingVertical: 11,
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+    },
+    deleteButtonText: {
+      color: colors.danger,
+      fontWeight: '700',
+    },
+  });

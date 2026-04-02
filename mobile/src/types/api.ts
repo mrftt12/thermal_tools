@@ -156,3 +156,23 @@ export interface ProjectCreatePayload {
   cables: CablePosition[];
   parameters: CalculationParameters;
 }
+
+export interface AIMessage {
+  message_id: string;
+  owner_id: string;
+  session_id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  created_at: string;
+}
+
+export interface AIHistoryResponse {
+  session_id: string;
+  messages: AIMessage[];
+}
+
+export interface AIChatResponse {
+  session_id: string;
+  assistant_message: string;
+  messages: AIMessage[];
+}

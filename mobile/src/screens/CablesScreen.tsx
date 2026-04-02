@@ -1,6 +1,5 @@
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,16 +11,16 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { RootStackParamList } from '../../App';
 import { useDevice } from '../context/DeviceContext';
+import { useThemeColors } from '../context/ThemeContext';
 import { mobileApi } from '../lib/api';
 import { Cable } from '../types/api';
-import { colors } from '../theme';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Cables'>;
-
-export function CablesScreen({ navigation }: Props) {
+export function CablesScreen({ navigation }: { navigation: any }) {
   const { deviceId } = useDevice();
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const [cables, setCables] = useState<Cable[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -134,113 +133,116 @@ export function CablesScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    backgroundColor: colors.background,
-    padding: 16,
-    gap: 10,
-  },
-  toolbar: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
-    padding: 10,
-  },
-  searchInput: {
-    color: colors.textPrimary,
-    fontSize: 14,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  primaryButton: {
-    flex: 1,
-    backgroundColor: colors.cyan,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  primaryButtonText: {
-    color: '#06242a',
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    borderWidth: 1,
-    borderColor: colors.cyanMuted,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    justifyContent: 'center',
-  },
-  secondaryButtonText: {
-    color: colors.textPrimary,
-    fontWeight: '600',
-  },
-  loaderWrap: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  listContent: {
-    paddingBottom: 24,
-    gap: 10,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: 12,
-    gap: 8,
-  },
-  rowBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 10,
-  },
-  cardTitle: {
-    color: colors.textPrimary,
-    fontWeight: '700',
-    flex: 1,
-  },
-  cardMeta: {
-    color: colors.textSecondary,
-    fontSize: 12,
-  },
-  badge: {
-    fontSize: 10,
-    borderRadius: 999,
-    overflow: 'hidden',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    fontWeight: '700',
-  },
-  badgeLibrary: {
-    backgroundColor: '#1f2937',
-    color: '#d1d5db',
-  },
-  badgeCustom: {
-    backgroundColor: '#164e63',
-    color: '#a5f3fc',
-  },
-  editButton: {
-    marginTop: 2,
-    borderWidth: 1,
-    borderColor: colors.cyanMuted,
-    borderRadius: 10,
-    paddingVertical: 9,
-    alignItems: 'center',
-  },
-  editButtonText: {
-    color: colors.textPrimary,
-    fontWeight: '600',
-  },
-  emptyText: {
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 20,
-  },
-});
+const createStyles = (colors: ReturnType<typeof useThemeColors>) =>
+  StyleSheet.create({
+    page: {
+      flex: 1,
+      backgroundColor: colors.background,
+      padding: 16,
+      gap: 10,
+    },
+    toolbar: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      padding: 10,
+    },
+    searchInput: {
+      color: colors.textPrimary,
+      fontSize: 14,
+    },
+    actionsRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    primaryButton: {
+      flex: 1,
+      backgroundColor: colors.cyan,
+      paddingVertical: 10,
+      borderRadius: 10,
+      alignItems: 'center',
+    },
+    primaryButtonText: {
+      color: colors.primaryTextOnCyan,
+      fontWeight: '700',
+    },
+    secondaryButton: {
+      borderWidth: 1,
+      borderColor: colors.cyanMuted,
+      paddingHorizontal: 14,
+      borderRadius: 10,
+      justifyContent: 'center',
+      backgroundColor: colors.secondarySurface,
+    },
+    secondaryButtonText: {
+      color: colors.textPrimary,
+      fontWeight: '600',
+    },
+    loaderWrap: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    listContent: {
+      paddingBottom: 24,
+      gap: 10,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      padding: 12,
+      gap: 8,
+    },
+    rowBetween: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 10,
+    },
+    cardTitle: {
+      color: colors.textPrimary,
+      fontWeight: '700',
+      flex: 1,
+    },
+    cardMeta: {
+      color: colors.textSecondary,
+      fontSize: 12,
+    },
+    badge: {
+      fontSize: 10,
+      borderRadius: 999,
+      overflow: 'hidden',
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      fontWeight: '700',
+    },
+    badgeLibrary: {
+      backgroundColor: colors.secondarySurface,
+      color: colors.textSecondary,
+    },
+    badgeCustom: {
+      backgroundColor: colors.cyanMuted,
+      color: colors.textPrimary,
+    },
+    editButton: {
+      marginTop: 2,
+      borderWidth: 1,
+      borderColor: colors.cyanMuted,
+      borderRadius: 10,
+      paddingVertical: 9,
+      alignItems: 'center',
+      backgroundColor: colors.secondarySurface,
+    },
+    editButtonText: {
+      color: colors.textPrimary,
+      fontWeight: '600',
+    },
+    emptyText: {
+      color: colors.textSecondary,
+      textAlign: 'center',
+      marginTop: 20,
+    },
+  });

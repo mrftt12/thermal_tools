@@ -1,4 +1,3 @@
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -10,19 +9,19 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { RootStackParamList } from '../../App';
 import { useDevice } from '../context/DeviceContext';
+import { useThemeColors } from '../context/ThemeContext';
 import { mobileApi } from '../lib/api';
 import { Cable, Project, ProjectCreatePayload } from '../types/api';
-import { colors } from '../theme';
-
-type Props = NativeStackScreenProps<RootStackParamList, 'ProjectForm'>;
 
 const phaseSequence = ['A', 'B', 'C'];
+type CalcMode = 'neher_mcgrath' | 'transient';
 
-export function ProjectFormScreen({ route, navigation }: Props) {
+export function ProjectFormScreen({ route, navigation }: { route: any; navigation: any }) {
   const projectId = route.params?.projectId;
   const { deviceId } = useDevice();
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -33,7 +32,9 @@ export function ProjectFormScreen({ route, navigation }: Props) {
   const [ambientTemp, setAmbientTemp] = useState('20');
   const [burialDepth, setBurialDepth] = useState('1');
   const [soilResistivity, setSoilResistivity] = useState('1');
-  const [method, setMethod] = useState<'neher_mcgrath' | 'c57_91_2011'>('neher_mcgrath');
+  const [mode, setMode] = useState<CalcMode>('neher_mcgrath');
+  const [durationHours, setDurationHours] = useState('6');
+  const [emergencyFactor, setEmergencyFactor] = useState('1.2');
   const [selectedLoads, setSelectedLoads] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -55,7 +56,11 @@ export function ProjectFormScreen({ route, navigation }: Props) {
           setAmbientTemp(String(project.installation.ambient_temp_c));
           setBurialDepth(String(project.installation.burial_depth_m));
           setSoilResistivity(String(project.installation.soil_thermal_resistivity));
-          setMethod(project.parameters.method === 'c57_91_2011' ? 'c57_91_2011' : 'neher_mcgrath');
+
+          const nextMode: CalcMode = project.parameters.calculation_type === 'transient' ? 'transient' : 'neher_mcgrath';
+          setMode(nextMode);
+          setDurationHours(String(project.parameters.duration_hours ?? 6));
+          setEmergencyFactor(String(project.parameters.emergency_factor ?? 1.2));
 
           const restored: Record<string, string> = {};
           project.cables.forEach((cablePosition) => {
@@ -101,6 +106,7 @@ export function ProjectFormScreen({ route, navigation }: Props) {
 
   const buildPayload = (): ProjectCreatePayload => {
     const entries = Object.entries(selectedLoads);
+    const isTransient = mode === 'transient';
 
     return {
       name: name.trim(),
@@ -120,8 +126,10 @@ export function ProjectFormScreen({ route, navigation }: Props) {
         phase: phaseSequence[index % phaseSequence.length],
       })),
       parameters: {
-        method,
-        calculation_type: 'steady_state',
+        method: 'neher_mcgrath',
+        calculation_type: isTransient ? 'transient' : 'steady_state',
+        duration_hours: isTransient ? Number(durationHours) || 6 : undefined,
+        emergency_factor: isTransient ? Number(emergencyFactor) || 1.2 : undefined,
         daily_loss_factor: 0.7,
         transformer_settings: {},
       },
@@ -139,6 +147,19 @@ export function ProjectFormScreen({ route, navigation }: Props) {
     if (!selectedCableCount) {
       Alert.alert('No cables selected', 'Select at least one cable to run thermal calculations.');
       return;
+    }
+
+    if (mode === 'transient') {
+      const duration = Number(durationHours);
+      const emergency = Number(emergencyFactor);
+      if (!(duration > 0)) {
+        Alert.alert('Invalid transient input', 'Duration hours must be greater than 0.');
+        return;
+      }
+      if (!(emergency > 1)) {
+        Alert.alert('Invalid transient input', 'Emergency factor must be greater than 1.0.');
+        return;
+      }
     }
 
     const payload = buildPayload();
@@ -192,18 +213,42 @@ export function ProjectFormScreen({ route, navigation }: Props) {
         <Text style={styles.label}>Calculation Method</Text>
         <View style={styles.methodsRow}>
           <Pressable
-            style={[styles.methodButton, method === 'neher_mcgrath' && styles.methodButtonActive]}
-            onPress={() => setMethod('neher_mcgrath')}
+            style={[styles.methodButton, mode === 'neher_mcgrath' && styles.methodButtonActive]}
+            onPress={() => setMode('neher_mcgrath')}
           >
-            <Text style={[styles.methodButtonText, method === 'neher_mcgrath' && styles.methodButtonTextActive]}>Neher-McGrath</Text>
+            <Text style={[styles.methodButtonText, mode === 'neher_mcgrath' && styles.methodButtonTextActive]}>Neher-McGrath</Text>
           </Pressable>
           <Pressable
-            style={[styles.methodButton, method === 'c57_91_2011' && styles.methodButtonActive]}
-            onPress={() => setMethod('c57_91_2011')}
+            style={[styles.methodButton, mode === 'transient' && styles.methodButtonActive]}
+            onPress={() => setMode('transient')}
           >
-            <Text style={[styles.methodButtonText, method === 'c57_91_2011' && styles.methodButtonTextActive]}>C57.91 DTR</Text>
+            <Text style={[styles.methodButtonText, mode === 'transient' && styles.methodButtonTextActive]}>Transient</Text>
           </Pressable>
         </View>
+
+        {mode === 'transient' && (
+          <View style={styles.transientCard}>
+            <Text style={styles.label}>Duration Hours</Text>
+            <TextInput
+              value={durationHours}
+              onChangeText={setDurationHours}
+              keyboardType="decimal-pad"
+              style={styles.input}
+              placeholder="6"
+              placeholderTextColor={colors.textSecondary}
+            />
+
+            <Text style={styles.label}>Emergency Factor</Text>
+            <TextInput
+              value={emergencyFactor}
+              onChangeText={setEmergencyFactor}
+              keyboardType="decimal-pad"
+              style={styles.input}
+              placeholder="1.2"
+              placeholderTextColor={colors.textSecondary}
+            />
+          </View>
+        )}
       </View>
 
       <View style={styles.card}>
@@ -242,134 +287,144 @@ export function ProjectFormScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  content: {
-    padding: 16,
-    gap: 12,
-    paddingBottom: 34,
-  },
-  loaderWrap: {
-    flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    color: colors.textPrimary,
-    fontSize: 22,
-    fontWeight: '700',
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
-    padding: 12,
-    gap: 8,
-  },
-  cardTitle: {
-    color: colors.textPrimary,
-    fontWeight: '700',
-    marginBottom: 3,
-  },
-  label: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    marginTop: 4,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: '#0b1120',
-    borderRadius: 10,
-    color: colors.textPrimary,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-  },
-  methodsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  methodButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    backgroundColor: '#111827',
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  methodButtonActive: {
-    borderColor: colors.cyan,
-    backgroundColor: '#0f172a',
-  },
-  methodButtonText: {
-    color: colors.textSecondary,
-    fontWeight: '600',
-    fontSize: 12,
-  },
-  methodButtonTextActive: {
-    color: colors.textPrimary,
-  },
-  cableRow: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    backgroundColor: '#0b1120',
-    padding: 8,
-    gap: 8,
-  },
-  checkboxRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: colors.textSecondary,
-  },
-  checkboxChecked: {
-    backgroundColor: colors.cyan,
-    borderColor: colors.cyan,
-  },
-  cableInfo: {
-    flex: 1,
-  },
-  cableName: {
-    color: colors.textPrimary,
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  cableMeta: {
-    color: colors.textSecondary,
-    fontSize: 11,
-  },
-  loadInput: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    color: colors.textPrimary,
-    paddingHorizontal: 8,
-    paddingVertical: 7,
-    width: 90,
-    alignSelf: 'flex-end',
-  },
-  saveButton: {
-    backgroundColor: colors.cyan,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  saveButtonText: {
-    color: '#06242a',
-    fontWeight: '700',
-  },
-});
+const createStyles = (colors: ReturnType<typeof useThemeColors>) =>
+  StyleSheet.create({
+    page: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    content: {
+      padding: 16,
+      gap: 12,
+      paddingBottom: 34,
+    },
+    loaderWrap: {
+      flex: 1,
+      backgroundColor: colors.background,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    title: {
+      color: colors.textPrimary,
+      fontSize: 22,
+      fontWeight: '700',
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      padding: 12,
+      gap: 8,
+    },
+    transientCard: {
+      borderWidth: 1,
+      borderColor: colors.cyanMuted,
+      borderRadius: 10,
+      padding: 10,
+      gap: 6,
+      marginTop: 4,
+      backgroundColor: colors.secondarySurface,
+    },
+    cardTitle: {
+      color: colors.textPrimary,
+      fontWeight: '700',
+      marginBottom: 3,
+    },
+    label: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      marginTop: 4,
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.secondarySurface,
+      borderRadius: 10,
+      color: colors.textPrimary,
+      paddingHorizontal: 10,
+      paddingVertical: 9,
+    },
+    methodsRow: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    methodButton: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      backgroundColor: colors.surface,
+      paddingVertical: 10,
+      alignItems: 'center',
+    },
+    methodButtonActive: {
+      borderColor: colors.cyan,
+      backgroundColor: colors.secondarySurface,
+    },
+    methodButtonText: {
+      color: colors.textSecondary,
+      fontWeight: '600',
+      fontSize: 12,
+    },
+    methodButtonTextActive: {
+      color: colors.textPrimary,
+    },
+    cableRow: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      backgroundColor: colors.secondarySurface,
+      padding: 8,
+      gap: 8,
+    },
+    checkboxRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    checkbox: {
+      width: 18,
+      height: 18,
+      borderRadius: 5,
+      borderWidth: 1,
+      borderColor: colors.textSecondary,
+    },
+    checkboxChecked: {
+      backgroundColor: colors.cyan,
+      borderColor: colors.cyan,
+    },
+    cableInfo: {
+      flex: 1,
+    },
+    cableName: {
+      color: colors.textPrimary,
+      fontWeight: '600',
+      fontSize: 13,
+    },
+    cableMeta: {
+      color: colors.textSecondary,
+      fontSize: 11,
+    },
+    loadInput: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      color: colors.textPrimary,
+      paddingHorizontal: 8,
+      paddingVertical: 7,
+      width: 90,
+      alignSelf: 'flex-end',
+    },
+    saveButton: {
+      backgroundColor: colors.cyan,
+      borderRadius: 12,
+      paddingVertical: 12,
+      alignItems: 'center',
+      marginTop: 4,
+    },
+    saveButtonText: {
+      color: colors.primaryTextOnCyan,
+      fontWeight: '700',
+    },
+  });

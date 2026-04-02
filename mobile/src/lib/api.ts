@@ -1,4 +1,6 @@
 import {
+  AIChatResponse,
+  AIHistoryResponse,
   Cable,
   CableCreatePayload,
   CalculationResult,
@@ -50,7 +52,7 @@ async function apiRequest<T>(path: string, options: RequestOptions): Promise<T> 
         detail = errorPayload.detail;
       }
     } catch {
-      // keep fallback message
+      // keep fallback
     }
 
     throw new Error(detail);
@@ -62,6 +64,7 @@ async function apiRequest<T>(path: string, options: RequestOptions): Promise<T> 
 export const mobileApi = {
   getStats: (deviceId: string) => apiRequest<MobileStats>('/stats', { deviceId }),
   seedCables: (deviceId: string) => apiRequest<{ message: string }>('/seed-cables', { method: 'POST', deviceId }),
+
   listCables: (deviceId: string, query?: Record<string, QueryValue>) =>
     apiRequest<Cable[]>('/cables', { deviceId, query }),
   getCable: (deviceId: string, cableId: string) => apiRequest<Cable>(`/cables/${cableId}`, { deviceId }),
@@ -85,4 +88,16 @@ export const mobileApi = {
     apiRequest<CalculationResult>(`/calculate/${projectId}`, { method: 'POST', deviceId }),
   getResults: (deviceId: string, projectId: string) =>
     apiRequest<CalculationResult[]>(`/results/${projectId}`, { deviceId }),
+
+  getAIMessages: (deviceId: string, sessionId = 'default') =>
+    apiRequest<AIHistoryResponse>('/ai/messages', {
+      deviceId,
+      query: { session_id: sessionId, limit: 120 },
+    }),
+  sendAIMessage: (deviceId: string, message: string, sessionId = 'default') =>
+    apiRequest<AIChatResponse>('/ai/chat', {
+      method: 'POST',
+      deviceId,
+      body: { message, session_id: sessionId },
+    }),
 };

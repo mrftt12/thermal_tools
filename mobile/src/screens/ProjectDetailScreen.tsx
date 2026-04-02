@@ -1,6 +1,5 @@
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -10,17 +9,16 @@ import {
   Text,
   View,
 } from 'react-native';
-import { RootStackParamList } from '../../App';
 import { useDevice } from '../context/DeviceContext';
+import { useThemeColors } from '../context/ThemeContext';
 import { mobileApi } from '../lib/api';
 import { Project } from '../types/api';
-import { colors } from '../theme';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'ProjectDetail'>;
-
-export function ProjectDetailScreen({ route, navigation }: Props) {
+export function ProjectDetailScreen({ route, navigation }: { route: any; navigation: any }) {
   const { projectId } = route.params;
   const { deviceId } = useDevice();
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [project, setProject] = useState<Project | null>(null);
   const [resultCount, setResultCount] = useState(0);
@@ -82,7 +80,7 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
             try {
               await mobileApi.deleteProject(deviceId, projectId);
               Alert.alert('Deleted', 'Project removed successfully');
-              navigation.replace('Projects');
+              navigation.replace('MainTabs');
             } catch (error) {
               const message = error instanceof Error ? error.message : 'Failed to delete project';
               Alert.alert('Error', message);
@@ -101,6 +99,8 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
     );
   }
 
+  const methodLabel = project.parameters.calculation_type === 'transient' ? 'Transient' : 'Neher-McGrath';
+
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>{project.name}</Text>
@@ -109,7 +109,7 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Project Snapshot</Text>
         <Text style={styles.meta}>Status: {project.status.toUpperCase()}</Text>
-        <Text style={styles.meta}>Method: {project.parameters.method}</Text>
+        <Text style={styles.meta}>Method: {methodLabel}</Text>
         <Text style={styles.meta}>Cables: {project.cables.length}</Text>
         <Text style={styles.meta}>Ambient: {project.installation.ambient_temp_c} °C</Text>
         <Text style={styles.meta}>Burial depth: {project.installation.burial_depth_m} m</Text>
@@ -142,83 +142,85 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  content: {
-    padding: 16,
-    gap: 12,
-  },
-  loaderWrap: {
-    flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    color: colors.textPrimary,
-    fontSize: 24,
-    fontWeight: '700',
-  },
-  description: {
-    color: colors.textSecondary,
-    marginTop: -4,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
-    padding: 12,
-    gap: 6,
-  },
-  cardTitle: {
-    color: colors.textPrimary,
-    fontWeight: '700',
-    marginBottom: 3,
-  },
-  meta: {
-    color: colors.textSecondary,
-    fontSize: 13,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  primaryButton: {
-    flex: 1,
-    backgroundColor: colors.cyan,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  primaryButtonText: {
-    color: '#06242a',
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    borderWidth: 1,
-    borderColor: colors.cyanMuted,
-    borderRadius: 12,
-    paddingVertical: 11,
-    alignItems: 'center',
-    backgroundColor: '#0f172a',
-  },
-  secondaryButtonText: {
-    color: colors.textPrimary,
-    fontWeight: '600',
-  },
-  deleteButton: {
-    borderWidth: 1,
-    borderColor: colors.danger,
-    borderRadius: 12,
-    paddingVertical: 11,
-    alignItems: 'center',
-  },
-  deleteButtonText: {
-    color: colors.danger,
-    fontWeight: '700',
-  },
-});
+const createStyles = (colors: ReturnType<typeof useThemeColors>) =>
+  StyleSheet.create({
+    page: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    content: {
+      padding: 16,
+      gap: 12,
+    },
+    loaderWrap: {
+      flex: 1,
+      backgroundColor: colors.background,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    title: {
+      color: colors.textPrimary,
+      fontSize: 24,
+      fontWeight: '700',
+    },
+    description: {
+      color: colors.textSecondary,
+      marginTop: -4,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      padding: 12,
+      gap: 6,
+    },
+    cardTitle: {
+      color: colors.textPrimary,
+      fontWeight: '700',
+      marginBottom: 3,
+    },
+    meta: {
+      color: colors.textSecondary,
+      fontSize: 13,
+    },
+    actionsRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    primaryButton: {
+      flex: 1,
+      backgroundColor: colors.cyan,
+      borderRadius: 12,
+      paddingVertical: 12,
+      alignItems: 'center',
+    },
+    primaryButtonText: {
+      color: colors.primaryTextOnCyan,
+      fontWeight: '700',
+    },
+    secondaryButton: {
+      borderWidth: 1,
+      borderColor: colors.cyanMuted,
+      borderRadius: 12,
+      paddingVertical: 11,
+      alignItems: 'center',
+      backgroundColor: colors.secondarySurface,
+    },
+    secondaryButtonText: {
+      color: colors.textPrimary,
+      fontWeight: '600',
+    },
+    deleteButton: {
+      borderWidth: 1,
+      borderColor: colors.danger,
+      borderRadius: 12,
+      paddingVertical: 11,
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+    },
+    deleteButtonText: {
+      color: colors.danger,
+      fontWeight: '700',
+    },
+  });
