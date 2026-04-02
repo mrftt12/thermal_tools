@@ -5,7 +5,7 @@ from datetime import datetime
 import uuid
 
 class CableThermalAPITester:
-    def __init__(self, base_url="https://ductbank-thermal.preview.emergentagent.com"):
+    def __init__(self, base_url="https://thermal-preview.preview.emergentagent.com"):
         self.base_url = base_url
         self.token = None
         self.tests_run = 0
