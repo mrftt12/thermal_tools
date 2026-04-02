@@ -235,6 +235,29 @@ async def get_current_user(request: Request) -> User:
     
     return User(**user)
 
+# ============== MOBILE HELPERS ==============
+def _coerce_datetime_fields(record: Dict[str, Any], fields: List[str]) -> Dict[str, Any]:
+    for field in fields:
+        if isinstance(record.get(field), str):
+            record[field] = datetime.fromisoformat(record[field])
+    return record
+
+
+def _sanitize_device_id(raw_device_id: str) -> str:
+    sanitized = "".join(ch for ch in raw_device_id if ch.isalnum() or ch in {"-", "_"})
+    if len(sanitized) < 8:
+        raise HTTPException(status_code=400, detail="Invalid mobile device id")
+    return sanitized[:64]
+
+
+async def get_mobile_owner_id(request: Request) -> str:
+    raw_device_id = request.headers.get("x-mobile-device-id") or request.query_params.get("device_id")
+    if not raw_device_id:
+        raise HTTPException(status_code=400, detail="x-mobile-device-id header or device_id query param is required")
+
+    return f"mobile_{_sanitize_device_id(raw_device_id)}"
+
+
 # ============== AUTH ROUTES ==============
 @api_router.post("/auth/session")
 async def create_session(request: Request, response: Response):
@@ -482,6 +505,300 @@ async def delete_project(project_id: str, user: User = Depends(get_current_user)
     await db.calculation_results.delete_many({"project_id": project_id})
     return {"message": "Project deleted"}
 
+# ============== MOBILE PUBLIC ROUTES (NO AUTH, DEVICE-SCOPED) ==============
+@api_router.get("/mobile/stats")
+async def get_mobile_stats(owner_id: str = Depends(get_mobile_owner_id)):
+    """Get mobile dashboard stats for a device-scoped guest user."""
+    project_count = await db.projects.count_documents({"user_id": owner_id})
+    cable_count = await db.cables.count_documents({})
+
+    owned_projects = await db.projects.find({"user_id": owner_id}, {"_id": 0, "project_id": 1}).to_list(500)
+    project_ids = [project["project_id"] for project in owned_projects]
+    calculation_count = await db.calculation_results.count_documents(
+        {"project_id": {"$in": project_ids}}
+    ) if project_ids else 0
+
+    recent_projects = await db.projects.find(
+        {"user_id": owner_id}, {"_id": 0}
+    ).sort("updated_at", -1).limit(5).to_list(5)
+
+    for project in recent_projects:
+        _coerce_datetime_fields(project, ["created_at", "updated_at"])
+
+    return {
+        "project_count": project_count,
+        "calculation_count": calculation_count,
+        "cable_count": cable_count,
+        "recent_projects": recent_projects,
+    }
+
+
+@api_router.get("/mobile/cables", response_model=List[Cable])
+async def get_mobile_cables(
+    voltage: Optional[float] = None,
+    material: Optional[str] = None,
+    manufacturer: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 100,
+    skip: int = 0,
+    owner_id: str = Depends(get_mobile_owner_id),
+):
+    """Get cable library + device-created cables for mobile clients."""
+    filters: List[Dict[str, Any]] = [
+        {
+            "$or": [
+                {"created_by": "system"},
+                {"created_by": {"$exists": False}},
+                {"created_by": owner_id},
+            ]
+        }
+    ]
+
+    if voltage:
+        filters.append({"voltage_rating_kv": voltage})
+    if material:
+        filters.append({"conductor.material": material})
+    if manufacturer:
+        filters.append({"manufacturer": {"$regex": manufacturer, "$options": "i"}})
+    if search:
+        filters.append(
+            {
+                "$or": [
+                    {"designation": {"$regex": search, "$options": "i"}},
+                    {"manufacturer": {"$regex": search, "$options": "i"}},
+                ]
+            }
+        )
+
+    query: Dict[str, Any] = {"$and": filters} if len(filters) > 1 else filters[0]
+    cables = await db.cables.find(query, {"_id": 0}).skip(skip).limit(limit).to_list(limit)
+
+    for cable in cables:
+        _coerce_datetime_fields(cable, ["created_at", "updated_at"])
+
+    return cables
+
+
+@api_router.get("/mobile/cables/{cable_id}", response_model=Cable)
+async def get_mobile_cable(cable_id: str, owner_id: str = Depends(get_mobile_owner_id)):
+    """Get a specific cable if it is public/system or belongs to the device."""
+    cable = await db.cables.find_one(
+        {
+            "cable_id": cable_id,
+            "$or": [
+                {"created_by": "system"},
+                {"created_by": {"$exists": False}},
+                {"created_by": owner_id},
+            ],
+        },
+        {"_id": 0},
+    )
+    if not cable:
+        raise HTTPException(status_code=404, detail="Cable not found")
+
+    _coerce_datetime_fields(cable, ["created_at", "updated_at"])
+    return cable
+
+
+@api_router.post("/mobile/cables", response_model=Cable)
+async def create_mobile_cable(cable_data: CableCreate, owner_id: str = Depends(get_mobile_owner_id)):
+    """Create a cable for a device-scoped guest user."""
+    cable = Cable(**cable_data.model_dump(), created_by=owner_id)
+    doc = cable.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    doc["updated_at"] = doc["updated_at"].isoformat()
+
+    await db.cables.insert_one(doc)
+    return cable
+
+
+@api_router.put("/mobile/cables/{cable_id}", response_model=Cable)
+async def update_mobile_cable(
+    cable_id: str,
+    cable_data: CableCreate,
+    owner_id: str = Depends(get_mobile_owner_id),
+):
+    """Update only cables created by this mobile device."""
+    existing = await db.cables.find_one({"cable_id": cable_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Cable not found")
+    if existing.get("created_by") != owner_id:
+        raise HTTPException(status_code=403, detail="You can edit only your own mobile cables")
+
+    update_data = cable_data.model_dump()
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    await db.cables.update_one({"cable_id": cable_id}, {"$set": update_data})
+    updated = await db.cables.find_one({"cable_id": cable_id}, {"_id": 0})
+    _coerce_datetime_fields(updated, ["created_at", "updated_at"])
+    return updated
+
+
+@api_router.delete("/mobile/cables/{cable_id}")
+async def delete_mobile_cable(cable_id: str, owner_id: str = Depends(get_mobile_owner_id)):
+    """Delete only cables created by this mobile device."""
+    result = await db.cables.delete_one({"cable_id": cable_id, "created_by": owner_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Cable not found or not owned by this device")
+    return {"message": "Cable deleted"}
+
+
+@api_router.get("/mobile/projects", response_model=List[Project])
+async def get_mobile_projects(owner_id: str = Depends(get_mobile_owner_id)):
+    """Get projects for a device-scoped guest user."""
+    projects = await db.projects.find({"user_id": owner_id}, {"_id": 0}).sort("updated_at", -1).to_list(200)
+
+    for project in projects:
+        _coerce_datetime_fields(project, ["created_at", "updated_at"])
+
+    return projects
+
+
+@api_router.get("/mobile/projects/{project_id}", response_model=Project)
+async def get_mobile_project(project_id: str, owner_id: str = Depends(get_mobile_owner_id)):
+    """Get one project for a device-scoped guest user."""
+    project = await db.projects.find_one({"project_id": project_id, "user_id": owner_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    _coerce_datetime_fields(project, ["created_at", "updated_at"])
+    return project
+
+
+@api_router.post("/mobile/projects", response_model=Project)
+async def create_mobile_project(project_data: ProjectCreate, owner_id: str = Depends(get_mobile_owner_id)):
+    """Create a project for a device-scoped guest user."""
+    project = Project(**project_data.model_dump(), user_id=owner_id)
+    doc = project.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    doc["updated_at"] = doc["updated_at"].isoformat()
+
+    await db.projects.insert_one(doc)
+    return project
+
+
+@api_router.put("/mobile/projects/{project_id}", response_model=Project)
+async def update_mobile_project(
+    project_id: str,
+    project_data: ProjectCreate,
+    owner_id: str = Depends(get_mobile_owner_id),
+):
+    """Update a project for a device-scoped guest user."""
+    existing = await db.projects.find_one({"project_id": project_id, "user_id": owner_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    update_data = project_data.model_dump()
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    await db.projects.update_one({"project_id": project_id, "user_id": owner_id}, {"$set": update_data})
+    updated = await db.projects.find_one({"project_id": project_id, "user_id": owner_id}, {"_id": 0})
+    _coerce_datetime_fields(updated, ["created_at", "updated_at"])
+    return updated
+
+
+@api_router.delete("/mobile/projects/{project_id}")
+async def delete_mobile_project(project_id: str, owner_id: str = Depends(get_mobile_owner_id)):
+    """Delete a project and associated results for a device-scoped guest user."""
+    result = await db.projects.delete_one({"project_id": project_id, "user_id": owner_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    await db.calculation_results.delete_many({"project_id": project_id})
+    return {"message": "Project deleted"}
+
+
+@api_router.post("/mobile/calculate/{project_id}")
+async def run_mobile_calculation(project_id: str, owner_id: str = Depends(get_mobile_owner_id)):
+    """Run thermal calculation for a mobile guest project."""
+    project = await db.projects.find_one({"project_id": project_id, "user_id": owner_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    cable_ids = [pos["cable_id"] for pos in project.get("cables", [])]
+    cables = await db.cables.find({"cable_id": {"$in": cable_ids}}, {"_id": 0}).to_list(100)
+    if not cables:
+        raise HTTPException(status_code=400, detail="No cables found for this project")
+
+    cable_positions = [CablePosition(**pos) for pos in project.get("cables", [])]
+    installation = InstallationConfig(**project.get("installation", {}))
+    parameters = CalculationParameters(**project.get("parameters", {}))
+
+    if parameters.method == "neher_mcgrath":
+        result = ThermalCalculator.neher_mcgrath_steady_state(
+            cables, cable_positions, installation, parameters.daily_loss_factor
+        )
+    elif parameters.method == "c57_91_2011":
+        result = ThermalCalculator.c57_transformer_analysis(
+            cables, cable_positions, installation, parameters
+        )
+    else:
+        result = ThermalCalculator.neher_mcgrath_steady_state(
+            cables, cable_positions, installation, parameters.daily_loss_factor
+        )
+
+    if parameters.method != "c57_91_2011" and parameters.calculation_type == "transient" and parameters.duration_hours:
+        result["time_series"] = ThermalCalculator.transient_analysis(
+            cables, cable_positions, installation, parameters.duration_hours
+        )
+
+    if parameters.method != "c57_91_2011" and parameters.emergency_factor and parameters.emergency_factor > 1.0:
+        result["emergency_rating"] = ThermalCalculator.calculate_emergency_rating(
+            result,
+            parameters.emergency_factor,
+            parameters.duration_hours or 2.0,
+            cables,
+            cable_positions,
+            installation,
+        )
+
+    calc_result = CalculationResult(
+        project_id=project_id,
+        cable_temperatures=result.get("cable_temperatures", []),
+        ampacity_values=result.get("ampacity_values", []),
+        mutual_heating=result.get("mutual_heating", []),
+        hotspot_info=result.get("hotspot_info", {}),
+        time_series=result.get("time_series"),
+        emergency_rating=result.get("emergency_rating"),
+        calculation_method=parameters.method,
+        calculation_time_ms=result.get("calculation_time_ms", 0),
+        dtr_results=result.get("dtr_results"),
+    )
+
+    doc = calc_result.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    await db.calculation_results.insert_one(doc)
+
+    await db.projects.update_one(
+        {"project_id": project_id, "user_id": owner_id},
+        {"$set": {"status": "calculated", "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+
+    return calc_result
+
+
+@api_router.get("/mobile/results/{project_id}")
+async def get_mobile_results(project_id: str, owner_id: str = Depends(get_mobile_owner_id)):
+    """Get calculation results for a mobile guest project."""
+    project = await db.projects.find_one({"project_id": project_id, "user_id": owner_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    results = await db.calculation_results.find(
+        {"project_id": project_id}, {"_id": 0}
+    ).sort("created_at", -1).to_list(10)
+
+    for result in results:
+        _coerce_datetime_fields(result, ["created_at"])
+
+    return results
+
+
+@api_router.post("/mobile/seed-cables")
+async def seed_mobile_cables():
+    """Allow mobile clients to seed shared cable library when empty."""
+    return await seed_cables()
+
 # ============== THERMAL CALCULATION ENGINE ==============
 class ThermalCalculator:
     """Implementation of Neher-McGrath and IEC 60853 thermal calculations"""
@@ -550,7 +867,6 @@ class ThermalCalculator:
             # Get cable properties
             conductor = cable.get("conductor", {})
             insulation = cable.get("insulation", {})
-            jacket = cable.get("jacket", {})
             thermal = cable.get("thermal", {})
             dimensions = cable.get("dimensions", {})
             
