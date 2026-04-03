@@ -4,6 +4,7 @@ import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { DeviceProvider, useDevice } from './src/context/DeviceContext';
 import { ThemeProvider, useThemeContext } from './src/context/ThemeContext';
 import { DashboardScreen } from './src/screens/DashboardScreen';
@@ -41,23 +42,39 @@ function MainTabs() {
   return (
     <Tabs.Navigator
       initialRouteName="Dashboard"
-      screenOptions={{
+      screenOptions={({ route }) => ({
         headerShown: false,
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
-          height: 62,
+          height: 64,
           paddingBottom: 8,
           paddingTop: 6,
         },
         tabBarActiveTintColor: colors.cyan,
         tabBarInactiveTintColor: colors.textSecondary,
-      }}
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+        },
+        tabBarIcon: ({ color, size, focused }) => {
+          const iconNameMap: Record<keyof MainTabParamList, keyof typeof Ionicons.glyphMap> = {
+            Dashboard: focused ? 'grid' : 'grid-outline',
+            Projects: focused ? 'folder-open' : 'folder-open-outline',
+            Cables: focused ? 'flash' : 'flash-outline',
+            AI: focused ? 'sparkles' : 'sparkles-outline',
+            Settings: focused ? 'settings' : 'settings-outline',
+          };
+
+          const iconName = iconNameMap[route.name as keyof MainTabParamList] ?? 'ellipse-outline';
+          return <Ionicons name={iconName} size={size} color={color} />;
+        },
+      })}
     >
       <Tabs.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
       <Tabs.Screen name="Projects" component={ProjectsScreen} options={{ title: 'Projects' }} />
       <Tabs.Screen name="Cables" component={CablesScreen} options={{ title: 'Cable Library' }} />
-      <Tabs.Screen name="AI" component={AIScreen} options={{ title: 'AI' }} />
+      <Tabs.Screen name="AI" component={AIScreen} options={{ title: 'AI Expert' }} />
       <Tabs.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
     </Tabs.Navigator>
   );
